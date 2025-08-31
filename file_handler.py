@@ -127,10 +127,9 @@ class FileHandler:
                     fleet_data = self._process_excel(fleet_file)
                 st.info("Using uploaded fleet file for data merging.")
             else:
-                # Use default fleet data from attached assets
-                fleet_file_path = 'attached_assets/data (1)_1756300554840.xlsx'
-                fleet_data = pd.read_excel(fleet_file_path, sheet_name='Export')
-                st.info("Using default fleet file for data merging.")
+                # No fleet file uploaded - return E-form data without merging
+                st.info("No fleet file uploaded. Working with E-form data only.")
+                return eform_data
             
             if fleet_data is None or fleet_data.empty:
                 st.warning("No fleet data available for merging.")

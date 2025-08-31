@@ -43,58 +43,62 @@ class AnalysisDashboard:
         # Apply current filters to get filtered data for KPIs
         filtered_data = self._apply_vessel_filter(data, config)
         
-        # Determine number of columns based on available data (excluding Fleet)
-        columns_count = 3  # Base: Total Records, Unique Vessels, Unique E-Forms
-        if 'Management Unit' in data.columns:
-            columns_count += 1
-        if 'Fleet Name' in data.columns:
-            columns_count += 1
+        # Check if fleet data is available
+        has_fleet_data = 'Management Unit' in data.columns and 'Fleet Name' in data.columns
         
-        # Create columns dynamically
-        if columns_count == 3:
-            col1, col2, col3 = st.columns(3)
-        elif columns_count == 4:
-            col1, col2, col3, col4 = st.columns(4)
-        else:
+        if has_fleet_data:
+            # Show all KPIs when fleet data is available
             col1, col2, col3, col4, col5 = st.columns(5)
-        
-        with col1:
-            st.metric("Total Records", len(filtered_data))
-        
-        with col2:
-            unique_vessels = filtered_data[config['vessel_col']].nunique()
-            st.metric("Unique Vessels", unique_vessels)
-        
-        with col3:
-            # Count unique E-Forms (including all versions as separate)
-            unique_eforms = filtered_data[config['eform_col']].dropna().nunique()
-            st.metric("Unique E-Forms", unique_eforms)
-        
-        col_index = 4
-        if 'Management Unit' in data.columns:
-            with locals()[f'col{col_index}']:
+            
+            with col1:
+                st.metric("Total Records", len(filtered_data))
+            
+            with col2:
+                unique_vessels = filtered_data[config['vessel_col']].nunique()
+                st.metric("Unique Vessels", unique_vessels)
+            
+            with col3:
+                unique_eforms = filtered_data[config['eform_col']].dropna().nunique()
+                st.metric("Unique E-Forms", unique_eforms)
+            
+            with col4:
                 unique_mgmt_units = filtered_data['Management Unit'].nunique()
                 st.metric("Unique Management Units", unique_mgmt_units)
-            col_index += 1
-        
-        if 'Fleet Name' in data.columns:
-            with locals()[f'col{col_index}']:
+            
+            with col5:
                 unique_fleet_names = filtered_data['Fleet Name'].nunique()
                 st.metric("Unique Fleet Names", unique_fleet_names)
+        else:
+            # Show only basic KPIs when fleet data is not available
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                st.metric("Total Records", len(filtered_data))
+            
+            with col2:
+                unique_vessels = filtered_data[config['vessel_col']].nunique()
+                st.metric("Unique Vessels", unique_vessels)
+            
+            with col3:
+                unique_eforms = filtered_data[config['eform_col']].dropna().nunique()
+                st.metric("Unique E-Forms", unique_eforms)
     
     def _render_vessel_filter(self):
-        """Render hierarchical filtering section: Management Unit → Fleet Name → Vessel"""
+        """Render filtering section - shows fleet filters only if fleet data is loaded"""
         data = self.data_processor.get_data()
         config = self.data_processor.get_config()
         
-        st.header("🔍 Hierarchical Filter Options")
+        st.header("🔍 Filter Options")
         
-        # Create three columns for hierarchical filtering
-        col1, col2, col3 = st.columns(3)
+        # Check if fleet data is available
+        has_fleet_data = 'Management Unit' in data.columns and 'Fleet Name' in data.columns
         
-        with col1:
-            st.subheader("🏢 Management Unit")
-            if 'Management Unit' in data.columns:
+        if has_fleet_data:
+            # Show hierarchical filtering when fleet data is available
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                st.subheader("🏢 Management Unit")
                 management_units = sorted(data['Management Unit'].dropna().unique())
                 selected_mgmt_units = st.multiselect(
                     "Select Management Units:",
@@ -109,14 +113,9 @@ class AnalysisDashboard:
                     filtered_data = data[data['Management Unit'].isin(selected_mgmt_units)]
                 else:
                     filtered_data = data
-            else:
-                st.info("Management Unit data not available")
-                filtered_data = data
-                selected_mgmt_units = ["All"]
-        
-        with col2:
-            st.subheader("⛵ Fleet Name")
-            if 'Fleet Name' in filtered_data.columns:
+            
+            with col2:
+                st.subheader("⛵ Fleet Name")
                 available_fleet_names = sorted(filtered_data['Fleet Name'].dropna().unique())
                 selected_fleet_names = st.multiselect(
                     "Select Fleet Names:",
@@ -129,21 +128,31 @@ class AnalysisDashboard:
                 # Further filter data based on fleet name selection
                 if 'All' not in selected_fleet_names:
                     filtered_data = filtered_data[filtered_data['Fleet Name'].isin(selected_fleet_names)]
-            else:
-                st.info("Fleet Name data not available")
-                selected_fleet_names = ["All"]
-        
-        with col3:
+            
+            with col3:
+                st.subheader("🚢 Vessel")
+                vessel_col = config['vessel_col']
+                available_vessels = sorted(filtered_data[vessel_col].dropna().unique())
+                selected_vessels = st.multiselect(
+                    "Select Vessels:",
+                    options=["All"] + available_vessels,
+                    default=["All"],
+                    help="Third level filter - Individual vessels",
+                    key="vessel_filter"
+                )
+        else:
+            # Show only vessel filter when fleet data is not available
             st.subheader("🚢 Vessel")
             vessel_col = config['vessel_col']
-            available_vessels = sorted(filtered_data[vessel_col].dropna().unique())
+            available_vessels = sorted(data[vessel_col].dropna().unique())
             selected_vessels = st.multiselect(
                 "Select Vessels:",
                 options=["All"] + available_vessels,
                 default=["All"],
-                help="Third level filter - Individual vessels",
+                help="Filter by individual vessels",
                 key="vessel_filter"
             )
+            filtered_data = data
         
         # Additional filters row
         st.write("---")
@@ -183,15 +192,18 @@ class AnalysisDashboard:
         # Apply vessel filter if exists
         filtered_data = self._apply_vessel_filter(data, config)
         
-        # Get unique vessels with counts and management/fleet information (excluding Fleet column)
+        # Check if fleet data is available
+        has_fleet_data = 'Management Unit' in data.columns and 'Fleet Name' in data.columns
+        
+        # Get unique vessels with counts and management/fleet information only if fleet data is loaded
         group_columns = [config['vessel_col']]
         column_names = ['Vessel Name']
         
-        if 'Management Unit' in filtered_data.columns:
+        if has_fleet_data and 'Management Unit' in filtered_data.columns:
             group_columns.append('Management Unit')
             column_names.append('Management Unit')
         
-        if 'Fleet Name' in filtered_data.columns:
+        if has_fleet_data and 'Fleet Name' in filtered_data.columns:
             group_columns.append('Fleet Name')
             column_names.append('Fleet Name')
         
@@ -252,11 +264,14 @@ class AnalysisDashboard:
         jobs_with_eforms = filtered_data[filtered_data['E-Form'].notna()]
         
         if not jobs_with_eforms.empty:
-            # Select relevant columns including vessel name and management/fleet-related columns (excluding Fleet)
+            # Check if fleet data is available
+            has_fleet_data = 'Management Unit' in data.columns and 'Fleet Name' in data.columns
+            
+            # Select relevant columns including vessel name and management/fleet-related columns only if fleet data is loaded
             job_columns = ['Job Code', 'Title', 'E-Form', 'Frequency', config['vessel_col']]
-            if 'Management Unit' in jobs_with_eforms.columns:
+            if has_fleet_data and 'Management Unit' in jobs_with_eforms.columns:
                 job_columns.append('Management Unit')
-            if 'Fleet Name' in jobs_with_eforms.columns:
+            if has_fleet_data and 'Fleet Name' in jobs_with_eforms.columns:
                 job_columns.append('Fleet Name')
             
             available_columns = [col for col in job_columns if col in jobs_with_eforms.columns]
